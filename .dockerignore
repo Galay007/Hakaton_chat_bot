@@ -1,0 +1,1 @@
+__pycache__/\n*.pyc\n*.pyo\n*.pyd\n*.log\n.env\n.git\n.gitignore\ndocs/\nartifacts/\nvenv/\n.venv/\n__MACOSX/\n
