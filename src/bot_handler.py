@@ -102,7 +102,7 @@ class BotHandler:
         document = message.document
         if not self.file_manager.is_supported(document):
             await message.reply_text(
-                "Файл {name} не поддерживается. Нужен JSON файл формата.".format(
+                "Файл {name} не поддерживается. Нужен файл формата JSON.".format(
                     name=document.file_name
                 )
             )
