@@ -57,9 +57,11 @@ class BotHandler:
         session = self._get_session(update.effective_user.id)
         session.reset()
         await update.message.reply_text(
-            "Привет! Отправьте файлы экспорта в JSON формате. "
+            "Привет! Отправьте файл или файлы экспорта в JSON формате. Размер файла не более {size:.2f} мб. "
             "После загрузки используйте команду /export, чтобы получить результат. "
-            "Можно в любой момент ввести /reset, чтобы начать заново."
+            "Можно в любой момент ввести /reset, чтобы начать заново.".format(
+                size=self.settings.max_size / (1024 * 1024)
+            )
         )
 
     async def help_command(
@@ -69,8 +71,11 @@ class BotHandler:
             return
         await update.message.reply_text(
             "1. Пришлите один или несколько файлов экспорта чата JSON формата.\n"
-            "2. Введите /export, чтобы получить список участников.\n"
-            "3. Для сброса присланных файлов отправьте /reset, чтобы начать заново."
+            "2. Размер каждого файла не должен превышать {size:.2f}.\n"
+            "3. Введите /export, чтобы получить список участников.\n"
+            "4. Для сброса присланных файлов отправьте /reset, чтобы начать заново.".format(
+                size=self.settings.max_size / (1024 * 1024)
+            )
             )
 
 
@@ -102,6 +107,16 @@ class BotHandler:
                 )
             )
             return
+        size_limit = self.settings.max_size
+        file_size = document.file_size
+        if file_size > size_limit:
+            await message.reply_text(
+                "Файл {name} не поддерживается. Его размер превышает {size:.2f} Мб. "
+                .format(name=document.file_name,size=size_limit / (1024 * 1024))
+            )
+            return
+
+
 
         context.chat_data.setdefault(BATCH_KEY, {
             'messages': [],
