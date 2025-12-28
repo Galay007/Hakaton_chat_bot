@@ -137,25 +137,6 @@ class BotHandler:
         scheduled_task = loop.create_task(self._finalize_and_process_batch(context,session))
         group_data['task'] = scheduled_task
 
-    async def _finalize_and_process_batch(self, context: ContextTypes.DEFAULT_TYPE, session):
-        group_data = context.chat_data.get(BATCH_KEY)
-        if not group_data:
-            return
-
-        all_messages = group_data['messages']
-        first_message = group_data['first_message']
-
-        all_docs = [msg.document for msg in all_messages if msg.document]
-        count = len(all_docs)
-
-        if not all_docs:
-            del context.chat_data[BATCH_KEY]
-            return
-
-        await first_message.reply_text(
-            f"Всего получено {count} файл(а)/(ов) нужного формата.\nДля обработки отправьте /export, для сброса /reset."
-        )
-
     async def export(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> None:
@@ -194,6 +175,25 @@ class BotHandler:
         session.reset()
 
     # Output helpers ------------------------------------------------------
+    async def _finalize_and_process_batch(self, context: ContextTypes.DEFAULT_TYPE, session):
+        group_data = context.chat_data.get(BATCH_KEY)
+        if not group_data:
+            return
+
+        all_messages = group_data['messages']
+        first_message = group_data['first_message']
+
+        all_docs = [msg.document for msg in all_messages if msg.document]
+        count = len(all_docs)
+
+        if not all_docs:
+            del context.chat_data[BATCH_KEY]
+            return
+
+        await first_message.reply_text(
+            f"Всего получено {count} файл(а)/(ов) нужного формата.\nДля обработки отправьте /export, для сброса /reset."
+        )
+
     async def _send_inline_response(self, message, session: SessionData) -> None:
         rows = list(session.participants.values())
         rows.sort(key=lambda rec: (rec.username or rec.full_name or "").lower())
