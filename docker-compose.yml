@@ -6,5 +6,6 @@ services:
     restart: unless-stopped
     environment:
       - BOT_TOKEN=${BOT_TOKEN}
+      - MAX_SIZE=${MAX_SIZE}
       - LOG_LEVEL=INFO
     command: python -m src.main

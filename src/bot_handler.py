@@ -54,10 +54,12 @@ class BotHandler:
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not update.effective_user or not update.message:
             return
+        if BATCH_KEY in context.chat_data:
+            del context.chat_data[BATCH_KEY]
         session = self._get_session(update.effective_user.id)
         session.reset()
         await update.message.reply_text(
-            "Привет! Отправьте файл или файлы экспорта в JSON формате. Размер файла не более {size:.2f} мб. "
+            "Привет! Отправьте файл или файлы экспорта в JSON формате. Размер файла не более {size:.1f} Мб. "
             "После загрузки используйте команду /export, чтобы получить результат. "
             "Можно в любой момент ввести /reset, чтобы начать заново.".format(
                 size=self.settings.max_size / (1024 * 1024)
@@ -71,7 +73,7 @@ class BotHandler:
             return
         await update.message.reply_text(
             "1. Пришлите один или несколько файлов экспорта чата JSON формата.\n"
-            "2. Размер каждого файла не должен превышать {size:.2f}.\n"
+            "2. Размер каждого файла не должен превышать {size:.1f} Мб.\n"
             "3. Введите /export, чтобы получить список участников.\n"
             "4. Для сброса присланных файлов отправьте /reset, чтобы начать заново.".format(
                 size=self.settings.max_size / (1024 * 1024)
@@ -111,12 +113,10 @@ class BotHandler:
         file_size = document.file_size
         if file_size > size_limit:
             await message.reply_text(
-                "Файл {name} не поддерживается. Его размер превышает {size:.2f} Мб. "
+                "Файл {name} не поддерживается. Его размер превышает {size:.1f} Мб. "
                 .format(name=document.file_name,size=size_limit / (1024 * 1024))
             )
             return
-
-
 
         context.chat_data.setdefault(BATCH_KEY, {
             'messages': [],
@@ -134,10 +134,10 @@ class BotHandler:
             current_task.cancel()
 
         loop = asyncio.get_event_loop()
-        scheduled_task = loop.create_task(self.finalize_and_process_batch(context,session))
+        scheduled_task = loop.create_task(self._finalize_and_process_batch(context,session))
         group_data['task'] = scheduled_task
 
-    async def finalize_and_process_batch(self, context: ContextTypes.DEFAULT_TYPE, session):
+    async def _finalize_and_process_batch(self, context: ContextTypes.DEFAULT_TYPE, session):
         group_data = context.chat_data.get(BATCH_KEY)
         if not group_data:
             return
@@ -152,15 +152,6 @@ class BotHandler:
             del context.chat_data[BATCH_KEY]
             return
 
-        await first_message.chat.send_action(ChatAction.TYPING)
-
-        for doc in all_docs:
-            payload = await self.file_manager.fetch_file_bytes(
-                context.bot, doc.file_id
-            )
-            parsed = self.data_processor.parse_document(doc.file_name, payload)
-            session.merge(parsed)
-
         await first_message.reply_text(
             f"Всего получено {count} файл(а)/(ов) нужного формата.\nДля обработки отправьте /export, для сброса /reset."
         )
@@ -172,12 +163,25 @@ class BotHandler:
             return
         session = self._get_session(update.effective_user.id)
 
+        group_data = context.chat_data.get(BATCH_KEY)
+        if not group_data:
+            await update.message.reply_text(
+                "Нет файлов для обработки. Отправьте один или несколько файлов экспорта."
+            )
+            return
+
+        await self._run_parser_job(update,group_data,context,session)
 
         total = len(session.participants)
-        if total == 0:
+        files_received = session.files_received
+
+        if total == 0 and files_received > 0:
             await update.message.reply_text(
-                "Нет данных. Сначала отправьте один или несколько файлов экспорта."
+                "Нет данных о переписке. Отправьте файл, где есть участники чата."
             )
+            if BATCH_KEY in context.chat_data:
+                del context.chat_data[BATCH_KEY]
+            session.reset()
             return
 
         if total < self.settings.min_inline_response:
@@ -205,6 +209,24 @@ class BotHandler:
                 total=len(rows), payload="\n".join(lines)
             )
         )
+
+    async def _run_parser_job(self,update: Update, group_data, context,session):
+        all_messages = group_data['messages']
+
+        all_docs = [msg.document for msg in all_messages if msg.document]
+        if len(all_docs) > 0:
+            await update.message.reply_text(
+                "Обрабатываю данные..."
+            )
+            await update.effective_chat.send_action(ChatAction.TYPING)
+
+            for doc in all_docs:
+                payload = await self.file_manager.fetch_file_bytes(
+                    context.bot, doc.file_id
+                )
+                await update.effective_chat.send_action(ChatAction.TYPING)
+                parsed = self.data_processor.parse_document(doc.file_name, payload)
+                session.merge(parsed)
 
     async def _send_excel(
         self,
